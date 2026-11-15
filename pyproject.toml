@@ -1,0 +1,74 @@
+[project]
+name = "decision-lab"
+version = "0.1.0"
+description = "Jev + Strands Decision Lab: quién toma la decisión. El agente propone, Jev evalúa, las políticas autorizan."
+readme = "README.md"
+authors = [
+    { name = "Hazel A. Saenz", email = "34319979+hsaenzG@users.noreply.github.com" },
+]
+requires-python = ">=3.11"
+license = { text = "MIT" }
+keywords = ["strands", "jev", "typesafe", "agents", "bedrock", "aws", "decision", "policy"]
+
+# Dependencias base del laboratorio. El modo offline (mock) no requiere ninguna
+# dependencia externa de red: todo corre localmente y de forma determinista.
+dependencies = []
+
+[project.optional-dependencies]
+# Modo con agente real de Strands sobre Amazon Bedrock.
+strands = [
+    "strands-agents>=1.65.0",
+]
+# Modo con el proveedor real de Jev (TypeSafe AI). Solo se usa si hay credenciales.
+jev = [
+    "typesafe-sdk>=0.7.5",
+]
+# Todo junto, para una demo completa en vivo.
+live = [
+    "strands-agents>=1.65.0",
+    "typesafe-sdk>=0.7.5",
+]
+
+[project.scripts]
+decision-lab = "decision_lab.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.6.0",
+    "mypy>=1.11.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.22,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+# Los integradores con Strands y TypeSafe se importan de forma perezosa y son
+# dependencias opcionales (extras). Cuando no están instalados, sus imports y
+# los type: ignore asociados no se pueden resolver; no los tratamos como error.
+warn_unused_ignores = false
+packages = ["decision_lab"]
+
+[[tool.mypy.overrides]]
+module = ["strands.*", "typesafe_sdk.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# agent.py y hooks.py envuelven APIs no tipadas de un SDK opcional ausente.
+module = ["decision_lab.agent", "decision_lab.hooks"]
+disallow_untyped_decorators = false
+warn_return_any = false

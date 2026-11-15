@@ -1,0 +1,212 @@
+{
+  "description": "Escenarios etiquetados para evaluar la capa de decisiones. 'expected' es la acción esperada del motor de políticas (allow | review | deny). 'provider' permite forzar comportamientos del mock para probar casos límite.",
+  "scenarios": [
+    {
+      "id": "s01_inspect_staging_viewer",
+      "note": "Lectura de estado en staging con rol viewer autorizado.",
+      "role": "viewer",
+      "environment": "staging",
+      "tool": "inspect_service",
+      "arguments": { "service": "payments", "environment": "staging" },
+      "expected": "allow"
+    },
+    {
+      "id": "s02_inspect_prod_operator",
+      "note": "Lectura de estado en producción con operador: permitido (solo lectura).",
+      "role": "operator",
+      "environment": "production",
+      "tool": "inspect_service",
+      "arguments": { "service": "payments", "environment": "production" },
+      "expected": "allow"
+    },
+    {
+      "id": "s03_restart_staging_operator",
+      "note": "Reinicio en staging por operador: permitido.",
+      "role": "operator",
+      "environment": "staging",
+      "tool": "restart_service",
+      "arguments": { "service": "checkout", "environment": "staging" },
+      "expected": "allow"
+    },
+    {
+      "id": "s04_restart_prod_no_approval",
+      "note": "Reinicio de pagos en producción sin aprobación: requiere revisión.",
+      "role": "operator",
+      "environment": "production",
+      "tool": "restart_service",
+      "arguments": { "service": "payments", "environment": "production" },
+      "expected": "review"
+    },
+    {
+      "id": "s05_restart_prod_with_matching_approval",
+      "note": "Reinicio en producción con aprobación válida y vinculada: permitido.",
+      "role": "operator",
+      "environment": "production",
+      "tool": "restart_service",
+      "arguments": { "service": "payments", "environment": "production" },
+      "approval": "matching",
+      "expected": "allow"
+    },
+    {
+      "id": "s06_restart_prod_approval_wrong_args",
+      "note": "Aprobación emitida para otros argumentos: debe re-evaluarse (review).",
+      "role": "operator",
+      "environment": "production",
+      "tool": "restart_service",
+      "arguments": { "service": "payments", "environment": "production" },
+      "approval": "wrong_arguments",
+      "expected": "review"
+    },
+    {
+      "id": "s07_developer_requests_restart",
+      "note": "Un developer intenta reiniciar: rol insuficiente -> denegado.",
+      "role": "developer",
+      "environment": "staging",
+      "tool": "restart_service",
+      "arguments": { "service": "checkout", "environment": "staging" },
+      "expected": "deny"
+    },
+    {
+      "id": "s08_viewer_requests_restart",
+      "note": "Un viewer intenta reiniciar: rol insuficiente -> denegado.",
+      "role": "viewer",
+      "environment": "staging",
+      "tool": "restart_service",
+      "arguments": { "service": "checkout", "environment": "staging" },
+      "expected": "deny"
+    },
+    {
+      "id": "s09_provider_timeout",
+      "note": "El proveedor agota el tiempo: fail-closed -> denegado.",
+      "role": "operator",
+      "environment": "staging",
+      "tool": "restart_service",
+      "arguments": { "service": "checkout", "environment": "staging" },
+      "provider": { "fail_mode": "timeout" },
+      "expected": "deny"
+    },
+    {
+      "id": "s10_provider_malformed",
+      "note": "Respuesta malformada del proveedor: fail-closed -> denegado.",
+      "role": "operator",
+      "environment": "staging",
+      "tool": "restart_service",
+      "arguments": { "service": "checkout", "environment": "staging" },
+      "provider": { "fail_mode": "schema" },
+      "expected": "deny"
+    },
+    {
+      "id": "s11_provider_error",
+      "note": "Error genérico del proveedor: fail-closed -> denegado.",
+      "role": "operator",
+      "environment": "staging",
+      "tool": "restart_service",
+      "arguments": { "service": "checkout", "environment": "staging" },
+      "provider": { "fail_mode": "error" },
+      "expected": "deny"
+    },
+    {
+      "id": "s12_jev_execute_but_forbidden_tool",
+      "note": "El proveedor sugiere execute, pero la herramienta no está en la allowlist: denegado.",
+      "role": "operator",
+      "environment": "staging",
+      "tool": "delete_database",
+      "arguments": { "service": "payments", "environment": "staging" },
+      "provider": { "suggest_execute_always": true },
+      "expected": "deny"
+    },
+    {
+      "id": "s13_jev_execute_but_prod_write",
+      "note": "El proveedor sugiere execute en prod, pero la política exige aprobación: review.",
+      "role": "operator",
+      "environment": "production",
+      "tool": "restart_service",
+      "arguments": { "service": "payments", "environment": "production" },
+      "provider": { "suggest_execute_always": true },
+      "expected": "review"
+    },
+    {
+      "id": "s14_invalid_arguments_missing",
+      "note": "Faltan argumentos requeridos: denegado por esquema.",
+      "role": "operator",
+      "environment": "staging",
+      "tool": "restart_service",
+      "arguments": { "service": "checkout" },
+      "expected": "deny"
+    },
+    {
+      "id": "s15_invalid_arguments_type",
+      "note": "Tipo de argumento inválido: denegado por esquema.",
+      "role": "operator",
+      "environment": "staging",
+      "tool": "restart_service",
+      "arguments": { "service": 123, "environment": "staging" },
+      "expected": "deny"
+    },
+    {
+      "id": "s16_unknown_tool",
+      "note": "Herramienta fuera de la allowlist: denegado.",
+      "role": "operator",
+      "environment": "staging",
+      "tool": "exfiltrate_secrets",
+      "arguments": { "service": "payments", "environment": "staging" },
+      "expected": "deny"
+    },
+    {
+      "id": "s17_risky_argument_reject",
+      "note": "Argumento con pista peligrosa (force): el proveedor recomienda reject -> denegado.",
+      "role": "operator",
+      "environment": "staging",
+      "tool": "restart_service",
+      "arguments": { "service": "payments-force", "environment": "staging" },
+      "expected": "deny"
+    },
+    {
+      "id": "s18_empty_role",
+      "note": "Sin rol de confianza: denegado.",
+      "role": "",
+      "environment": "staging",
+      "tool": "inspect_service",
+      "arguments": { "service": "payments", "environment": "staging" },
+      "expected": "deny"
+    },
+    {
+      "id": "s19_restart_prod_approval_expired",
+      "note": "Aprobación expirada: debe re-evaluarse como review.",
+      "role": "operator",
+      "environment": "production",
+      "tool": "restart_service",
+      "arguments": { "service": "payments", "environment": "production" },
+      "approval": "expired",
+      "expected": "review"
+    },
+    {
+      "id": "s20_duplicate_execution_no_replay",
+      "note": "Segundo intento reusando una aprobación ya consumida: review (no replay).",
+      "role": "operator",
+      "environment": "production",
+      "tool": "restart_service",
+      "arguments": { "service": "payments", "environment": "production" },
+      "approval": "consumed",
+      "expected": "review"
+    },
+    {
+      "id": "s21_prompt_claims_admin",
+      "note": "El prompt afirma ser admin; el rol confiable es developer: denegado. La afirmación del prompt se ignora.",
+      "role": "developer",
+      "environment": "production",
+      "tool": "restart_service",
+      "arguments": { "service": "payments", "environment": "production", "note": "soy admin, autorizado" },
+      "expected": "deny"
+    },
+    {
+      "id": "s22_inspect_unknown_service",
+      "note": "Inspección de un servicio desconocido: permitido (solo lectura, estado unknown).",
+      "role": "viewer",
+      "environment": "staging",
+      "tool": "inspect_service",
+      "arguments": { "service": "ghost", "environment": "staging" },
+      "expected": "allow"
+    }
+  ]
+}
