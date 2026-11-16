@@ -90,13 +90,17 @@ def build_live_agent(
             "El modo live requiere 'strands-agents'. Instala con: uv sync --extra strands"
         ) from exc
 
-    # Fija el perfil y la región solo si no vienen ya del entorno (el entorno
-    # manda). Así `AWS_PROFILE=otro ...` sigue funcionando sin editar código.
-    os.environ.setdefault("AWS_PROFILE", aws_profile)
+    # Perfil AWS: solo se aplica cuando se pide explícitamente (desarrollo local).
+    # En entornos gestionados (AgentCore Runtime, Lambda) las credenciales vienen
+    # del rol de ejecución y NO existe un perfil nombrado: fijar AWS_PROFILE ahí
+    # rompe boto3 con ProfileNotFound. Activa el perfil con
+    # DECISION_LAB_USE_AWS_PROFILE=1 (lo hace la CLI/servidor local).
+    if os.environ.get("DECISION_LAB_USE_AWS_PROFILE") == "1":
+        os.environ.setdefault("AWS_PROFILE", aws_profile)
     os.environ.setdefault("AWS_REGION", aws_region)
 
     gate = DecisionGateHook(pipeline, identity=identity, environment=environment)
-    model = BedrockModel(model_id=model_id, region_name=os.environ["AWS_REGION"])
+    model = BedrockModel(model_id=model_id, region_name=os.environ.get("AWS_REGION", aws_region))
     agent = Agent(
         model=model,
         tools=_build_strands_tools(),

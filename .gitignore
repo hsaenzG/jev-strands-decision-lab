@@ -18,3 +18,11 @@ traces.jsonl
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/
+
+# AgentCore (per-máquina: paths absolutos + ARNs)
+.bedrock_agentcore.yaml
+.bedrock_agentcore/
+
+# Copia del paquete para el bundle de AgentCore (se regenera en cada deploy)
+deploy/agentcore/decision_lab/
+web/.env.production

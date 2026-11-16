@@ -28,6 +28,14 @@ live = [
     "strands-agents>=1.65.0",
     "typesafe-sdk>=0.7.5",
 ]
+# Despliegue en Amazon Bedrock AgentCore Runtime.
+agentcore = [
+    "strands-agents>=1.65.0",
+    "typesafe-sdk>=0.7.5",
+    "bedrock-agentcore>=1.26.0",
+    "boto3>=1.35.0",
+    "botocore[crt]>=1.35.0",
+]
 
 [project.scripts]
 decision-lab = "decision_lab.cli:main"
