@@ -77,6 +77,20 @@ aprobación.
 - Verificación de primera mano del endpoint REST, el precio y la latencia de Jev
   contra `docs.typesafe.ai` (no se pudo renderizar el contenido dinámico del
   sitio en esta sesión).
-- Prueba en vivo del `RealJevProvider` contra la API real (requiere
-  `TYPESAFE_API_KEY`). El código está escrito contra el contrato verificado del
-  SDK, pero **no se ha ejecutado contra el servicio real** en este laboratorio.
+- Prueba en vivo del `RealJevProvider` contra la API real: **intentada el
+  2026-11-16**. El adaptador llega correctamente a `POST
+  https://api.typesafe.ai/v1/systemone`, pero la clave disponible (`vck_...`)
+  devuelve **401 (no autentica)**. El código es correcto; falta una clave válida
+  de TypeSafe AI. El prefijo `vck_` no parece de TypeSafe.
+
+## Verificado en vivo (2026-11-16)
+
+- **Agente real de Strands sobre Amazon Bedrock**: ejecutado con el perfil AWS
+  `free-tier-Strands` (cuenta 018913574975, us-east-2) y el modelo
+  `us.amazon.nova-pro-v1:0`. El agente razonó, propuso herramientas en un ciclo
+  agéntico real (inspect → restart → inspect), y el hook `BeforeToolCallEvent`
+  interceptó cada propuesta.
+- **El gate bloquea de verdad**: un developer pidiendo `restart_service` en
+  producción fue denegado (`unauthorized_role`) antes de cualquier efecto; el
+  modelo recibió el bloqueo de vuelta y se lo explicó al usuario. Confirma
+  "razonar no es autorizar" con un LLM real.
