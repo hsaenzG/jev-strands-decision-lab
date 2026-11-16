@@ -2,6 +2,10 @@
 
 > El agente **propone**, Jev **evalúa**, las políticas **autorizan**.
 
+> **🚀 Demo en vivo:** https://www.apps.strands-jev-demo.hazelsaenz.tech
+> — agente real de Strands sobre Amazon Bedrock (Nova) + Jev real (TypeSafe AI,
+> `jev-1.14.0`), desplegado en AgentCore Runtime + Amplify.
+
 Un laboratorio educativo y reproducible que muestra cómo incorporar una **capa de
 decisiones** a tus agentes. Un agente construido con [Strands Agents](https://strandsagents.com)
 sobre Amazon Bedrock propone llamadas de herramienta; un adaptador de decisión
@@ -214,18 +218,73 @@ src/decision_lab/
   providers/
     base.py        # interfaz DecisionProvider + errores
     mock.py        # MockJevProvider determinista
-    jev.py         # RealJevProvider (SDK typesafe-sdk, opcional)
+    jev.py         # RealJevProvider (SDK typesafe-sdk)
   tools.py         # herramientas simuladas (inspect_service, restart_service)
   telemetry.py     # trazas JSONL con redacción
   pipeline.py      # orquestación proveedor→política→ejecución→traza
+  steps.py         # pipeline instrumentado por pasos (para el frontend)
+  demo_scenarios.py# los 3 escenarios guionados, reutilizables
+  code_snippets.py # extrae el código real de cada etapa (inspect.getsource)
   hooks.py         # hook BeforeToolCallEvent de Strands
   agent.py         # agente Strands/Bedrock (modo live)
   evaluation.py    # carga y evalúa escenarios
+  env.py           # carga mínima de .env sin dependencias
+  server.py        # backend HTTP (stdlib) para el frontend local
   cli.py           # comandos demo / evaluate / scenarios
 tests/             # test_policy, test_hook, test_providers, test_scenarios
 examples/          # scenarios.json (22 escenarios etiquetados)
-docs/              # architecture, references, demo-script, benchmark-method
+docs/              # architecture, references, demo-script, benchmark-method, articulo
+web/               # frontend de aprendizaje (Astro): ciclo agéntico de cajas clicables
+deploy/
+  agentcore/       # entrypoint de AgentCore Runtime + requirements
+  bridge/          # Lambda puente navegador → AgentCore
 ```
+
+## Despliegue en AWS
+
+El laboratorio está desplegado de verdad en AWS (cuenta `free-tier-Strands`,
+`us-east-2`), con servicios reales de punta a punta:
+
+```
+Navegador (Astro en Amplify)
+  → API Gateway HTTP API → Lambda jev-bridge
+    → AgentCore Runtime (agente Strands + hook de decisión)
+      → Bedrock Nova (razona y propone)
+      → Jev real (TypeSafe AI, señal consultiva)
+      → política determinista (autoriza)
+  Secrets Manager: clave de Jev   ·   Route 53: dominio (cuenta aparte)
+```
+
+| Componente | Recurso |
+|---|---|
+| Agente | AgentCore Runtime `jevstrandsdemo` (Bedrock Nova) |
+| Clave de Jev | Secrets Manager `jev-strands-demo/typesafe-api-key` |
+| Puente navegador→agente | Lambda `jev-bridge` + API Gateway HTTP API (CORS) |
+| Sitio | Amplify Hosting (app `jev-strands-demo`) |
+| Dominio | `www.apps.strands-jev-demo.hazelsaenz.tech` |
+
+### Cómo se despliega
+
+- **Agente (AgentCore):** el entrypoint está en `deploy/agentcore/agent_runtime.py`
+  (las 4 líneas de `BedrockAgentCoreApp` sobre el mismo código del laboratorio).
+  Se despliega con el starter toolkit (`agentcore configure` → `agentcore deploy`).
+  La clave de Jev se lee de Secrets Manager; los imports pesados son perezosos
+  para no exceder el límite de 30 s de inicialización del runtime.
+- **Puente (Lambda):** `deploy/bridge/lambda_function.py` recibe las peticiones
+  del navegador e invoca el runtime con SigV4. Se usa API Gateway HTTP API (no
+  Function URL) porque la cuenta puede bloquear Function URLs públicas.
+- **Sitio (Amplify):** el FE de Astro se construye con `PUBLIC_API_BASE` apuntando
+  al endpoint del puente y se sube a Amplify (`web/amplify.yml`).
+
+### Notas aprendidas en el despliegue
+
+- La clave válida de Jev tiene prefijo `apikey_` (una `vck_` dio 401).
+- El agente **no fija `AWS_PROFILE`** en entornos gestionados (usan el rol de
+  ejecución); el perfil local es opt-in con `DECISION_LAB_USE_AWS_PROFILE=1`.
+- El DNS del dominio vive en otra cuenta: se crean solo registros nuevos.
+
+> Las herramientas siguen siendo **simuladas** también en la nube: el despliegue
+> demuestra la capa de decisiones, no toca infraestructura real.
 
 ## Limitaciones
 
