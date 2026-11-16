@@ -27,6 +27,23 @@ from typing import Any
 from ..models import DecisionSignals, DecisionState
 from .base import ProviderError, ProviderSchemaError, ProviderTimeout
 
+# Import opcional del SDK a nivel de módulo. El paquete es una dependencia
+# opcional (extra [jev]); si no está, el adaptador real no se puede usar, pero el
+# resto del laboratorio (mock) sigue funcionando.
+try:
+    from typesafe_sdk import (
+        Choice,
+        Noul,
+        TypeSafeAPIResponseValidationError,
+        TypeSafeAPITimeoutError,
+        TypeSafeClient,
+        TypeSafeError,
+    )
+
+    _SDK_AVAILABLE = True
+except ImportError:  # pragma: no cover - entorno sin el extra [jev]
+    _SDK_AVAILABLE = False
+
 # Pregunta Choice que mapea 1:1 con nuestras rutas internas.
 _ROUTE_CRITERIA = {
     "execute": "La acción operativa propuesta es segura y rutinaria; ejecutar.",
@@ -52,15 +69,16 @@ def _redacted_state_payload(state: DecisionState) -> dict[str, Any]:
 
 
 class RealJevProvider:
-    """Adaptador del SDK oficial de TypeSafe AI (Jev).
-
-    Importa `typesafe_sdk` de forma perezosa para que el laboratorio no dependa
-    del paquete en modo offline.
-    """
+    """Adaptador del SDK oficial de TypeSafe AI (Jev)."""
 
     name = "jev-typesafe"
 
     def __init__(self, *, model: str = "jev-latest", timeout: float = 10.0) -> None:
+        if not _SDK_AVAILABLE:
+            raise ProviderError(
+                "falta el paquete 'typesafe-sdk'; instala con el extra [jev]",
+                reason_code="provider_sdk_missing",
+            )
         if not jev_available():
             raise ProviderError(
                 "TYPESAFE_API_KEY no está configurada; usa el proveedor mock",
@@ -68,58 +86,36 @@ class RealJevProvider:
             )
         self.model = model
         self.timeout = timeout
-        # Import perezoso y tolerante: el paquete es opcional.
-        try:
-            from typesafe_sdk import Choice, Noul, TypeSafeClient  # type: ignore
-        except ImportError as exc:  # pragma: no cover - requiere entorno sin SDK
-            raise ProviderError(
-                "falta el paquete 'typesafe-sdk'; instala con el extra [jev]",
-                reason_code="provider_sdk_missing",
-            ) from exc
-        self._Choice = Choice
-        self._Noul = Noul
-        self._client_cls = TypeSafeClient
 
     def evaluate(self, state: DecisionState) -> DecisionSignals:
-        # Importa las excepciones del SDK para distinguir timeout / schema / otros.
-        try:
-            from typesafe_sdk import (  # type: ignore
-                TypeSafeAPIResponseValidationError,
-                TypeSafeAPITimeoutError,
-                TypeSafeError,
-            )
-        except ImportError:  # pragma: no cover
-            TypeSafeError = Exception  # type: ignore[assignment]
-            TypeSafeAPITimeoutError = Exception  # type: ignore[assignment]
-            TypeSafeAPIResponseValidationError = Exception  # type: ignore[assignment]
-
-        questions = {
-            "route": self._Choice(
+        questions: dict[str, Any] = {
+            "route": Choice(
                 instructions=(
                     "Dada esta acción operativa propuesta por un agente, "
                     "¿cuál es la ruta más prudente?"
                 ),
                 criteria=_ROUTE_CRITERIA,
             ),
-            "risk": self._Noul(
+            "risk": Noul(
                 instructions=(
-                    "¿Esta acción conlleva un riesgo operativo alto que justifique revisión humana?"
+                    "¿Esta acción conlleva un riesgo operativo alto que justifique "
+                    "revisión humana?"
                 ),
             ),
         }
 
         try:
-            with self._client_cls() as client:
+            with TypeSafeClient() as client:
                 response = client.system_one(
                     state=_redacted_state_payload(state),
                     questions=questions,
                     model=self.model,
                 )
-        except TypeSafeAPITimeoutError as exc:  # type: ignore[misc]
+        except TypeSafeAPITimeoutError as exc:
             raise ProviderTimeout(str(exc)) from exc
-        except TypeSafeAPIResponseValidationError as exc:  # type: ignore[misc]
+        except TypeSafeAPIResponseValidationError as exc:
             raise ProviderSchemaError(str(exc)) from exc
-        except TypeSafeError as exc:  # type: ignore[misc]
+        except TypeSafeError as exc:
             raise ProviderError(str(exc), reason_code="provider_api_error") from exc
         except Exception as exc:  # red u otros errores inesperados -> fail-closed
             raise ProviderError(
@@ -143,13 +139,15 @@ class RealJevProvider:
             risk = float(risk_answer.noul)
             model_used = getattr(response, "model", self.model)
         except Exception as exc:
-            raise ProviderSchemaError(f"no se pudo interpretar la respuesta de Jev: {exc}") from exc
+            raise ProviderSchemaError(
+                f"no se pudo interpretar la respuesta de Jev: {exc}"
+            ) from exc
 
         if route not in _ROUTE_CRITERIA:
             raise ProviderSchemaError(f"ruta desconocida devuelta por Jev: {route!r}")
 
         return DecisionSignals(
-            suggested_route=route,  # type: ignore[arg-type]
+            suggested_route=route,
             human_review_score=risk,
             risk_label=f"jev-risk={risk:.2f}",
             provider=f"jev-typesafe/{model_used}",

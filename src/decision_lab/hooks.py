@@ -52,7 +52,7 @@ class DecisionGateHook:
         # Resultados de las decisiones de esta invocación, para inspección en demo.
         self.decisions: list[Any] = []
 
-    def register_hooks(self, registry: HookRegistry) -> None:
+    def register_hooks(self, registry: HookRegistry, **kwargs: object) -> None:
         """Suscribe el callback de intercepción al evento BeforeToolCallEvent."""
         from strands.hooks import BeforeToolCallEvent
 

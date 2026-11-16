@@ -11,6 +11,7 @@ simuladas, nunca tocan infraestructura real.
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from .hooks import DecisionGateHook
@@ -28,6 +29,11 @@ DEFAULT_SYSTEM_PROMPT = (
 
 # Modelo por defecto de Bedrock. Hazel prefiere Amazon Nova para sus demos.
 DEFAULT_BEDROCK_MODEL = "us.amazon.nova-pro-v1:0"
+
+# Perfil y región AWS para el modo live. El perfil free-tier-Strands tiene acceso
+# a los perfiles de inferencia de Nova en us-east-2 (cuenta 018913574975).
+DEFAULT_AWS_PROFILE = "free-tier-Strands"
+DEFAULT_AWS_REGION = "us-east-2"
 
 
 def _build_strands_tools() -> list[Any]:
@@ -64,8 +70,15 @@ def build_live_agent(
     environment: str,
     model_id: str = DEFAULT_BEDROCK_MODEL,
     system_prompt: str = DEFAULT_SYSTEM_PROMPT,
+    aws_profile: str = DEFAULT_AWS_PROFILE,
+    aws_region: str = DEFAULT_AWS_REGION,
 ) -> Any:
     """Crea un `Agent` de Strands con el hook de decisión conectado.
+
+    Usa el perfil AWS `free-tier-Strands` y la región us-east-2 por defecto (donde
+    están disponibles los perfiles de inferencia de Nova). Se pueden sobrescribir
+    con los argumentos o con las variables de entorno AWS_PROFILE / AWS_REGION ya
+    presentes (que tienen prioridad).
 
     Lanza ImportError con un mensaje claro si falta el SDK.
     """
@@ -77,8 +90,13 @@ def build_live_agent(
             "El modo live requiere 'strands-agents'. Instala con: uv sync --extra strands"
         ) from exc
 
+    # Fija el perfil y la región solo si no vienen ya del entorno (el entorno
+    # manda). Así `AWS_PROFILE=otro ...` sigue funcionando sin editar código.
+    os.environ.setdefault("AWS_PROFILE", aws_profile)
+    os.environ.setdefault("AWS_REGION", aws_region)
+
     gate = DecisionGateHook(pipeline, identity=identity, environment=environment)
-    model = BedrockModel(model_id=model_id)
+    model = BedrockModel(model_id=model_id, region_name=os.environ["AWS_REGION"])
     agent = Agent(
         model=model,
         tools=_build_strands_tools(),

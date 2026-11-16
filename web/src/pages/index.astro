@@ -1,0 +1,271 @@
+---
+import Base from '../layouts/Base.astro';
+
+// Nodos del ciclo agéntico de Strands, en orden alrededor del anillo.
+// El ciclo: el modelo razona → propone herramienta → el gate la evalúa
+// (hook → estado → Jev → política) → se ejecuta/bloquea → el resultado VUELVE
+// al modelo, y el ciclo se repite hasta que el modelo no llama más herramientas.
+// 'key' coincide con los pasos del backend y con /api/code. Las variantes
+// finales execute/review/deny se mapean al nodo "outcome".
+const cycle = [
+  { key: 'model', icon: '🧠', label: 'Modelo razona', sub: 'Bedrock / Nova' },
+  { key: 'propose', icon: '🛠️', label: 'Propone tool', sub: 'tool_use' },
+  { key: 'hook', icon: '🪝', label: 'Hook intercepta', sub: 'BeforeToolCall' },
+  { key: 'state', icon: '🛡️', label: 'Estado confiable', sub: 'identidad/rol' },
+  { key: 'provider', icon: '⚖️', label: 'Jev evalúa', sub: 'consultivo' },
+  { key: 'policy', icon: '📜', label: 'Política decide', sub: 'autoriza' },
+  { key: 'outcome', icon: '🎬', label: 'Resultado', sub: '→ vuelve al modelo' },
+];
+---
+
+<Base title="Jev + Strands Decision Lab">
+  <main class="wrap">
+    <header>
+      <h1>¿Quién toma la decisión?</h1>
+      <p class="lede">
+        El agente <strong>propone</strong>, Jev <strong>evalúa</strong>, las
+        políticas <strong>autorizan</strong>. Es un <strong>ciclo</strong>: el
+        modelo razona, propone una herramienta, el resultado vuelve al modelo y
+        vuelve a empezar. <strong>Haz clic en cualquier caja</strong> para ver el
+        código real de esa etapa.
+      </p>
+    </header>
+
+    <section class="status-bar">
+      <span id="api-status" class="pill pill--muted">conectando con la API…</span>
+      <span class="hint">Backend: <code>uv run python -m decision_lab.server</code></span>
+    </section>
+
+    <section class="scenarios" id="scenarios" aria-label="Escenarios"></section>
+
+    <section class="controls" id="controls" hidden>
+      <label class="switch">
+        <input type="checkbox" id="approve-toggle" />
+        <span>Emitir aprobación humana vinculada</span>
+      </label>
+      <div class="buttons">
+        <button id="run-btn" class="btn btn--primary">▶ Correr escenario</button>
+        <button id="replay-btn" class="btn" hidden>↻ Repetir</button>
+      </div>
+    </section>
+
+    <!-- Ciclo agéntico de Strands: anillo de cajas clicables con retorno al modelo -->
+    <section class="cycle-wrap" aria-label="Ciclo agéntico">
+      <div class="cycle" id="cycle" style={`--n:${cycle.length}`}>
+        <svg class="cycle__loop" viewBox="0 0 100 100" aria-hidden="true">
+          <defs>
+            <marker id="ah" markerWidth="7" markerHeight="7" refX="5" refY="3.2"
+                    orient="auto"><path d="M0,0 L6,3.2 L0,6.4 Z" fill="currentColor"/></marker>
+          </defs>
+          <circle cx="50" cy="50" r="46" fill="none" stroke="currentColor"
+                  stroke-dasharray="2 4" stroke-width="0.6" opacity="0.4"/>
+          <path d="M 50 4 A 46 46 0 1 1 8 70" fill="none" stroke="currentColor"
+                stroke-width="0.9" marker-end="url(#ah)" opacity="0.75"/>
+        </svg>
+        <div class="cycle__hub" aria-hidden="true">
+          <div class="cycle__hub-title">ciclo agéntico</div>
+          <div class="cycle__hub-sub">el resultado vuelve al modelo ↻</div>
+        </div>
+        {cycle.map((node, i) => (
+          <button class="cnode" data-node={node.key} id={`node-${node.key}`} type="button"
+                  style={`--i:${i}`} aria-label={`Ver código de la etapa: ${node.label}`}>
+            <div class="cnode__icon">{node.icon}</div>
+            <div class="cnode__label">{node.label}</div>
+            <div class="cnode__sub">{node.sub}</div>
+            <div class="cnode__badge" aria-hidden="true"></div>
+          </button>
+        ))}
+      </div>
+      <p class="cycle__hint">El flujo es un <strong>ciclo</strong>: cada resultado de herramienta
+        regresa al modelo, que razona de nuevo, hasta que no llama más herramientas.
+        <span class="cycle__hint-click">Haz clic en cualquier caja para ver su código real.</span>
+      </p>
+    </section>
+
+    <!-- Veredicto final -->
+    <section class="verdict" id="verdict" hidden>
+      <div class="verdict__action" id="verdict-action"></div>
+      <div class="verdict__reason" id="verdict-reason"></div>
+      <div class="verdict__meta" id="verdict-meta"></div>
+    </section>
+
+    <!-- Panel de detalle de una caja: código real + datos de la corrida -->
+    <section class="detail" id="detail" hidden>
+      <div class="detail__head">
+        <div>
+          <h2 id="detail-title">Etapa</h2>
+          <div class="detail__file mono" id="detail-file"></div>
+        </div>
+        <button class="btn btn--ghost" id="detail-close" type="button">✕ cerrar</button>
+      </div>
+      <p class="detail__explain" id="detail-explain"></p>
+
+      <div class="detail__tabs" role="tablist">
+        <button class="tab is-active" id="tab-code" role="tab" type="button">Código</button>
+        <button class="tab" id="tab-io" role="tab" type="button">Entrada / salida</button>
+      </div>
+
+      <pre class="detail__code mono" id="detail-code"></pre>
+      <div class="detail__io" id="detail-io" hidden>
+        <p class="detail__io-summary" id="detail-io-summary"></p>
+        <pre class="detail__code mono" id="detail-io-data"></pre>
+        <p class="detail__io-empty" id="detail-io-empty" hidden>
+          Corre un escenario para ver qué entró y salió de esta etapa.
+        </p>
+      </div>
+    </section>
+
+    <!-- Inspector JSON de la traza completa -->
+    <section class="trace-panel" id="trace-panel" hidden>
+      <details>
+        <summary>Traza completa (JSON)</summary>
+        <pre class="trace mono" id="trace"></pre>
+      </details>
+    </section>
+
+    <footer class="foot">
+      <p>
+        Las herramientas son <strong>simuladas</strong>: nunca se toca
+        infraestructura real. Proyecto de aprendizaje — ver
+        <code>README.md</code> y <code>docs/</code>.
+      </p>
+    </footer>
+  </main>
+
+  <script>
+    import { initApp } from '../scripts/app.ts';
+    initApp();
+  </script>
+
+  <style>
+    .status-bar { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+    .hint { color: var(--muted); font-size: 0.85rem; }
+    .pill { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.2rem 0.7rem; border-radius: 999px; font-size: 0.8rem; border: 1px solid var(--border); }
+    .pill--muted { color: var(--muted); }
+    .pill--ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
+    .pill--err { color: var(--block); border-color: color-mix(in srgb, var(--block) 40%, transparent); }
+
+    .scenarios { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 0.9rem; margin-bottom: 1.25rem; }
+    .scenario { text-align: left; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 1rem; cursor: pointer; color: var(--text); transition: border-color 0.15s; }
+    .scenario:hover { border-color: var(--accent); }
+    .scenario[aria-selected="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+    .scenario__title { font-weight: 600; margin-bottom: 0.3rem; }
+    .scenario__desc { color: var(--muted); font-size: 0.85rem; }
+    .scenario__tags { margin-top: 0.6rem; display: flex; gap: 0.4rem; flex-wrap: wrap; }
+    .tag { font-size: 0.72rem; font-family: var(--mono); padding: 0.1rem 0.5rem; border-radius: 6px; background: var(--panel-2); border: 1px solid var(--border); color: var(--muted); }
+
+    .controls { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+    .switch { display: flex; align-items: center; gap: 0.5rem; color: var(--muted); cursor: pointer; }
+    .switch input { accent-color: var(--accent); width: 1.05rem; height: 1.05rem; }
+    .buttons { display: flex; gap: 0.6rem; }
+    .btn { background: var(--panel); border: 1px solid var(--border); color: var(--text); padding: 0.55rem 1rem; border-radius: 9px; cursor: pointer; font-size: 0.92rem; }
+    .btn:hover { border-color: var(--accent); }
+    .btn--primary { background: var(--accent); color: #04121c; border-color: var(--accent); font-weight: 600; }
+    .btn--ghost { background: transparent; color: var(--muted); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* --- Ciclo agéntico: anillo de cajas clicables --- */
+    .cycle-wrap { margin-bottom: 1.5rem; }
+    .cycle {
+      position: relative;
+      width: min(560px, 92vw);
+      aspect-ratio: 1;
+      margin: 0.5rem auto 0.75rem;
+      --r: clamp(130px, 37vw, 210px);   /* radio del anillo, responsivo */
+    }
+    .cycle__hub {
+      position: absolute;
+      top: 50%; left: 50%;
+      width: 40%; aspect-ratio: 1;
+      transform: translate(-50%, -50%);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center; color: var(--muted); gap: 0.2rem;
+    }
+    .cycle__hub-title { font-weight: 600; color: var(--text); font-size: 0.9rem; }
+    .cycle__hub-sub { font-size: 0.72rem; }
+    .cycle__loop { position: absolute; inset: 0; width: 100%; height: 100%; color: var(--accent); pointer-events: none; }
+
+    .cnode {
+      position: absolute;
+      top: 50%; left: 50%;
+      width: 118px;
+      /* Coloca cada caja en el anillo: ángulo = i/n de vuelta, arrancando arriba. */
+      transform:
+        translate(-50%, -50%)
+        rotate(calc(360deg * var(--i) / var(--n)))
+        translate(0, calc(-1 * var(--r)))
+        rotate(calc(-360deg * var(--i) / var(--n)));
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 0.55rem 0.4rem;
+      text-align: center;
+      color: var(--text);
+      cursor: pointer;
+      opacity: 0.6;
+      transition: opacity 0.25s, border-color 0.2s, box-shadow 0.2s;
+    }
+    .cnode:hover { opacity: 1; border-color: var(--accent); }
+    .cnode:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .cnode__icon { font-size: 1.35rem; }
+    .cnode__label { font-size: 0.76rem; margin-top: 0.15rem; color: var(--muted); font-weight: 600; }
+    .cnode__sub { font-size: 0.64rem; color: var(--muted); font-family: var(--mono); margin-top: 0.1rem; }
+    .cnode__badge { position: absolute; top: 0.35rem; right: 0.35rem; width: 0.5rem; height: 0.5rem; border-radius: 50%; background: transparent; }
+    .cnode.is-active { opacity: 1; box-shadow: 0 0 0 2px var(--accent), 0 8px 22px rgba(0,0,0,0.4); }
+    .cnode.is-selected { outline: 2px solid var(--accent); outline-offset: 1px; }
+    .cnode.s-ok    { border-color: var(--ok); opacity: 1; }
+    .cnode.s-ok .cnode__label { color: var(--ok); }
+    .cnode.s-ok .cnode__badge { background: var(--ok); }
+    .cnode.s-warn  { border-color: var(--warn); opacity: 1; }
+    .cnode.s-warn .cnode__label { color: var(--warn); }
+    .cnode.s-warn .cnode__badge { background: var(--warn); }
+    .cnode.s-block { border-color: var(--block); opacity: 1; }
+    .cnode.s-block .cnode__label { color: var(--block); }
+    .cnode.s-block .cnode__badge { background: var(--block); }
+    .cnode.s-info  { border-color: var(--info); opacity: 1; }
+    .cnode.s-info .cnode__badge { background: var(--info); }
+
+    .cycle__hint { color: var(--muted); font-size: 0.85rem; text-align: center; max-width: 60ch; margin: 0 auto; }
+    .cycle__hint strong { color: var(--text); }
+    .cycle__hint-click { display: block; margin-top: 0.2rem; color: var(--accent); }
+
+    /* En pantallas angostas, el anillo se vuelve una columna legible. */
+    @media (max-width: 560px) {
+      .cycle { width: 100%; aspect-ratio: auto; display: flex; flex-direction: column; gap: 0.5rem; }
+      .cycle__hub { position: static; transform: none; width: auto; margin-bottom: 0.3rem; }
+      .cycle__loop { display: none; }
+      .cnode { position: static; transform: none; width: 100%; }
+    }
+
+    .verdict { border-radius: 12px; padding: 1rem 1.2rem; margin-bottom: 1.5rem; border: 1px solid var(--border); background: var(--panel); }
+    .verdict.a-allow  { border-color: var(--ok); }
+    .verdict.a-review { border-color: var(--warn); }
+    .verdict.a-deny   { border-color: var(--block); }
+    .verdict__action { font-size: 1.4rem; font-weight: 700; letter-spacing: 0.04em; }
+    .verdict.a-allow  .verdict__action { color: var(--ok); }
+    .verdict.a-review .verdict__action { color: var(--warn); }
+    .verdict.a-deny   .verdict__action { color: var(--block); }
+    .verdict__reason { color: var(--text); margin-top: 0.2rem; }
+    .verdict__meta { color: var(--muted); font-size: 0.82rem; margin-top: 0.4rem; font-family: var(--mono); }
+
+    /* --- Panel de detalle de una caja --- */
+    .detail { border: 1px solid var(--accent); border-radius: 12px; background: var(--panel); padding: 1rem 1.2rem; margin-bottom: 1.5rem; }
+    .detail__head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+    .detail__head h2 { margin: 0; font-size: 1.1rem; }
+    .detail__file { color: var(--muted); font-size: 0.78rem; margin-top: 0.2rem; }
+    .detail__explain { color: var(--muted); font-size: 0.9rem; margin: 0.6rem 0 0.8rem; }
+    .detail__tabs { display: flex; gap: 0.4rem; margin-bottom: 0.6rem; }
+    .tab { background: var(--panel-2); border: 1px solid var(--border); color: var(--muted); padding: 0.35rem 0.8rem; border-radius: 8px 8px 0 0; cursor: pointer; font-size: 0.85rem; }
+    .tab.is-active { color: var(--text); border-color: var(--accent); background: var(--panel); }
+    .detail__code { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 0.9rem; overflow-x: auto; font-size: 0.8rem; color: var(--text); margin: 0; white-space: pre; }
+    .detail__io-summary { color: var(--text); font-size: 0.9rem; margin: 0 0 0.6rem; }
+    .detail__io-empty { color: var(--muted); font-size: 0.88rem; }
+
+    .trace-panel { margin-bottom: 1.5rem; }
+    .trace-panel summary { cursor: pointer; color: var(--muted); font-size: 0.9rem; }
+    .trace { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 1rem; overflow-x: auto; font-size: 0.78rem; color: var(--muted); margin-top: 0.6rem; }
+
+    .foot { color: var(--muted); font-size: 0.82rem; border-top: 1px solid var(--border); padding-top: 1rem; }
+    .foot strong { color: var(--text); }
+  </style>
+</Base>

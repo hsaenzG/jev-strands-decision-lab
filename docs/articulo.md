@@ -75,6 +75,7 @@ cancelarla antes de cualquier efecto secundario:
 ```python
 from strands.hooks import BeforeToolCallEvent, HookProvider, HookRegistry
 
+
 class DecisionGateHook(HookProvider):
     def register_hooks(self, registry: HookRegistry) -> None:
         registry.add_callback(BeforeToolCallEvent, self.intercept_tool)

@@ -104,6 +104,23 @@ Latencia local P50: 0.01 ms  P95: 0.01 ms
 uv run decision-lab scenarios
 ```
 
+## Frontend de aprendizaje (Astro)
+
+Hay una interfaz visual en [`web/`](web/) que dibuja el flujo agéntico como un
+**diagrama de cajas clicables**. Al correr un escenario, las cajas se iluminan en
+secuencia; al hacer clic en una, se abre el **código real** de esa etapa y su
+entrada/salida. Habla con un backend HTTP que expone el mismo motor:
+
+```bash
+# Terminal 1 — backend (stdlib, sin dependencias nuevas):
+uv run python -m decision_lab.server          # http://127.0.0.1:8000
+
+# Terminal 2 — frontend Astro:
+cd web && npm install && npm run dev           # http://localhost:4321
+```
+
+Detalle en [`web/README.md`](web/README.md).
+
 ## El motor de políticas (reglas deterministas en orden)
 
 De [`02 - Decision Policies and States`], implementado en `src/decision_lab/policy.py`:
@@ -143,13 +160,15 @@ agente real:
 
 ```bash
 uv sync --extra strands   # o --extra live para Strands + Jev
-export AWS_PROFILE=tu-perfil
-export AWS_REGION=us-east-1
+export AWS_PROFILE=free-tier-Strands
+export AWS_REGION=us-east-2
 ```
 
 El agente se arma en `src/decision_lab/agent.py` con el modelo
-`us.amazon.nova-pro-v1:0` (Amazon Nova) y el hook de decisión conectado. Las
-herramientas siguen siendo simuladas: **nunca se toca infraestructura real**.
+`us.amazon.nova-pro-v1:0` (Amazon Nova) sobre el perfil `free-tier-Strands`
+(región `us-east-2`, donde están los perfiles de inferencia de Nova) y el hook de
+decisión conectado. Las herramientas siguen siendo simuladas: **nunca se toca
+infraestructura real**.
 
 ## Qué está verificado y qué no
 
