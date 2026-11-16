@@ -31,6 +31,11 @@ autorización determinista (políticas) son responsabilidades diferentes.
 
 ## Arquitectura
 
+Hay dos vistas complementarias: el **flujo de decisión** (la lógica del agente) y
+la **infraestructura AWS** sobre la que corre desplegado.
+
+### 1. Flujo de decisión (lógica del agente)
+
 ```mermaid
 flowchart TD
     U[Solicitud del usuario] --> A[Agente Strands / Bedrock]
@@ -49,7 +54,42 @@ flowchart TD
     D --> O
 ```
 
-Detalle en [`docs/architecture.md`](docs/architecture.md).
+### 2. Infraestructura AWS (lo desplegado)
+
+```mermaid
+flowchart LR
+    User([Usuario / navegador])
+
+    subgraph PERSONAL["Cuenta AWS: personal"]
+        R53[Route 53<br/>zona hazelsaenz.tech]
+    end
+
+    subgraph STRANDS["Cuenta AWS: free-tier-Strands · us-east-2"]
+        AMP[Amplify Hosting<br/>FE Astro + CloudFront + ACM]
+        APIGW[API Gateway<br/>HTTP API + CORS]
+        LAMBDA[Lambda jev-bridge<br/>invoca el runtime con SigV4]
+        subgraph AC["AgentCore Runtime · jevstrandsdemo"]
+            AGENT[Agente Strands<br/>+ hook de decisión + política]
+        end
+        BR[Amazon Bedrock<br/>Nova us.amazon.nova-pro-v1:0]
+        SM[Secrets Manager<br/>clave de Jev]
+        CW[CloudWatch Logs]
+    end
+
+    JEV[[Jev · TypeSafe AI<br/>api.typesafe.ai · jev-1.14.0]]
+
+    User -->|HTTPS www.apps.strands-jev-demo.hazelsaenz.tech| R53
+    R53 -->|CNAME| AMP
+    AMP -->|fetch /api/*| APIGW
+    APIGW --> LAMBDA
+    LAMBDA -->|InvokeAgentRuntime| AGENT
+    AGENT -->|InvokeModel| BR
+    AGENT -->|señal consultiva| JEV
+    AGENT -->|GetSecretValue| SM
+    AGENT -.observabilidad.-> CW
+```
+
+Detalle y responsabilidades en [`docs/architecture.md`](docs/architecture.md).
 
 ## Requisitos
 
@@ -243,17 +283,8 @@ deploy/
 ## Despliegue en AWS
 
 El laboratorio está desplegado de verdad en AWS (cuenta `free-tier-Strands`,
-`us-east-2`), con servicios reales de punta a punta:
-
-```
-Navegador (Astro en Amplify)
-  → API Gateway HTTP API → Lambda jev-bridge
-    → AgentCore Runtime (agente Strands + hook de decisión)
-      → Bedrock Nova (razona y propone)
-      → Jev real (TypeSafe AI, señal consultiva)
-      → política determinista (autoriza)
-  Secrets Manager: clave de Jev   ·   Route 53: dominio (cuenta aparte)
-```
+`us-east-2`), con servicios reales de punta a punta. El diagrama de
+infraestructura está arriba, en [Arquitectura → Infraestructura AWS](#2-infraestructura-aws-lo-desplegado).
 
 | Componente | Recurso |
 |---|---|

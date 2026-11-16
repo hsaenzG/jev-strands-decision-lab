@@ -1,5 +1,10 @@
 # Arquitectura
 
+Dos vistas complementarias: el **flujo de decisión** (lógica del agente) y la
+**infraestructura AWS** sobre la que corre desplegado.
+
+## 1. Flujo de decisión (lógica del agente)
+
 ```mermaid
 flowchart TD
     U[Solicitud del usuario] --> A[Agente Strands / Bedrock]
@@ -17,6 +22,47 @@ flowchart TD
     X --> O[Traza y respuesta del agente]
     D --> O
 ```
+
+## 2. Infraestructura AWS (lo desplegado)
+
+```mermaid
+flowchart LR
+    User([Usuario / navegador])
+
+    subgraph PERSONAL["Cuenta AWS: personal"]
+        R53[Route 53<br/>zona hazelsaenz.tech]
+    end
+
+    subgraph STRANDS["Cuenta AWS: free-tier-Strands · us-east-2"]
+        AMP[Amplify Hosting<br/>FE Astro + CloudFront + ACM]
+        APIGW[API Gateway<br/>HTTP API + CORS]
+        LAMBDA[Lambda jev-bridge<br/>invoca el runtime con SigV4]
+        subgraph AC["AgentCore Runtime · jevstrandsdemo"]
+            AGENT[Agente Strands<br/>+ hook de decisión + política]
+        end
+        BR[Amazon Bedrock<br/>Nova us.amazon.nova-pro-v1:0]
+        SM[Secrets Manager<br/>clave de Jev]
+        CW[CloudWatch Logs]
+    end
+
+    JEV[[Jev · TypeSafe AI<br/>api.typesafe.ai · jev-1.14.0]]
+
+    User -->|HTTPS www.apps.strands-jev-demo.hazelsaenz.tech| R53
+    R53 -->|CNAME| AMP
+    AMP -->|fetch /api/*| APIGW
+    APIGW --> LAMBDA
+    LAMBDA -->|InvokeAgentRuntime| AGENT
+    AGENT -->|InvokeModel| BR
+    AGENT -->|señal consultiva| JEV
+    AGENT -->|GetSecretValue| SM
+    AGENT -.observabilidad.-> CW
+```
+
+Mapeo lógico → infraestructura: el *agente* y el *hook/política* viven dentro del
+**AgentCore Runtime**; el *adaptador de Jev* llama a **api.typesafe.ai**; el
+modelo es **Bedrock Nova**; el navegador llega por **Amplify → API Gateway →
+Lambda**. Las herramientas son simuladas también en la nube: no se toca
+infraestructura real.
 
 ## Responsabilidades
 
