@@ -77,11 +77,13 @@ aprobación.
 - Verificación de primera mano del endpoint REST, el precio y la latencia de Jev
   contra `docs.typesafe.ai` (no se pudo renderizar el contenido dinámico del
   sitio en esta sesión).
-- Prueba en vivo del `RealJevProvider` contra la API real: **intentada el
-  2026-11-16**. El adaptador llega correctamente a `POST
-  https://api.typesafe.ai/v1/systemone`, pero la clave disponible (`vck_...`)
-  devuelve **401 (no autentica)**. El código es correcto; falta una clave válida
-  de TypeSafe AI. El prefijo `vck_` no parece de TypeSafe.
+- Prueba en vivo del `RealJevProvider` contra la API real: **verificada el
+  2026-11-16**. Con una clave válida (prefijo `apikey_`), el adaptador autentica
+  contra `POST https://api.typesafe.ai/v1/systemone` y obtiene señales reales del
+  modelo `jev-1.14.0`:
+  - staging / inspect_service → `execute`, riesgo ~0.24.
+  - producción / restart_service → `review`, riesgo ~0.91, confianza ~0.92.
+  (Nota: una clave con prefijo `vck_` dio 401; usar la de prefijo `apikey_`.)
 
 ## Verificado en vivo (2026-11-16)
 
@@ -94,3 +96,8 @@ aprobación.
   producción fue denegado (`unauthorized_role`) antes de cualquier efecto; el
   modelo recibió el bloqueo de vuelta y se lo explicó al usuario. Confirma
   "razonar no es autorizar" con un LLM real.
+- **Jev real end-to-end**: con una clave válida (`apikey_...`), los 3 escenarios
+  corrieron contra `jev-1.14.0` sin mock. Señales reales: staging/inspect
+  `execute` (riesgo 0.24) → allow; prod/restart `review` (riesgo 0.91) → review;
+  con aprobación vinculada → allow (ejecutado); developer sin permiso → deny.
+  Latencia real observada de la llamada a Jev ~170 ms.
