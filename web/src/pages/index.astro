@@ -126,8 +126,16 @@ const cycle = [
     <footer class="foot">
       <p>
         Las herramientas son <strong>simuladas</strong>: nunca se toca
-        infraestructura real. Proyecto de aprendizaje — ver
-        <code>README.md</code> y <code>docs/</code>.
+        infraestructura real. Proyecto de aprendizaje — ver <code>README.md</code> y <code>docs/</code>.
+      </p>
+      <p class="foot__owner">
+        Proyecto de <strong>Hazel Saenz</strong> · <a
+          href="https://hazelsaenz.tech"
+          target="_blank"
+          rel="noopener noreferrer">hazelsaenz.tech</a> · construido con <a
+          href="https://strandsagents.com"
+          target="_blank"
+          rel="noopener noreferrer">Strands Agents</a>
       </p>
     </footer>
   </main>
@@ -267,5 +275,6 @@ const cycle = [
 
     .foot { color: var(--muted); font-size: 0.82rem; border-top: 1px solid var(--border); padding-top: 1rem; }
     .foot strong { color: var(--text); }
+    .foot__owner { margin-top: 0.4rem; }
   </style>
 </Base>
